@@ -13,54 +13,23 @@
 #include <mutex>
 #include <map>
 
+#define WIDTH  320
+#define HEIGHT 320
+
 using namespace std;
 using namespace sf;
 using namespace KeyFinder;
 
-const char* get_result(KeyFinder::key_t result) {
-    const char *key;
-    switch(result) {
-        case A_MAJOR: key      = "A Major"; break;
-        case A_MINOR: key      = "A Minor"; break;
-        case B_FLAT_MAJOR: key = "B Flat Major"; break;
-        case B_FLAT_MINOR: key = "B Flat Minor"; break;
-        case B_MAJOR: key      = "B Major"; break;
-        case B_MINOR: key      = "B Minor"; break;
-        case C_MAJOR: key      = "C Major"; break;
-        case C_MINOR: key      = "C Minor"; break;
-        case D_FLAT_MAJOR: key = "D Flat Major"; break;
-        case D_FLAT_MINOR: key = "D Flat Minor"; break;
-        case D_MAJOR: key      = "D Major"; break;
-        case D_MINOR: key      = "D Minor"; break;
-        case E_FLAT_MAJOR: key = "E Flat Major"; break;
-        case E_FLAT_MINOR: key = "E Flat Minor"; break;
-        case E_MAJOR: key      = "E Major"; break;
-        case E_MINOR: key      = "E Minor"; break;
-        case F_MAJOR: key      = "F Major"; break;
-        case F_MINOR: key      = "F Minor"; break;
-        case G_FLAT_MAJOR: key = "G Flat Major"; break;
-        case G_FLAT_MINOR: key = "G Flat Minor"; break;
-        case G_MAJOR: key      = "G Major"; break;
-        case G_MINOR: key      = "G Minor"; break;
-        case A_FLAT_MAJOR: key = "A Flat Major"; break;
-        case A_FLAT_MINOR: key = "A Flat Minor"; break;
-        case SILENCE: key      = "(silence)"; break;
-        default: key           = "No dice!";
-    }
-    return key;
-}
 typedef struct key {
     const char* text;
     const char* code;
     sf::Uint32  color;
 } key;
 
-/* static const struct KeySignature G_MINOR = {"G Minor", "6A", 0xffafb800}; */
-
+static map<KeyFinder::key_t,key> KeySignature;
 static KeyFinder::KeyFinder k;
 static AudioData a;
 static Workspace w;
-
 mutex mu;
 
 void initWorkspace() {
@@ -87,7 +56,6 @@ class CustomRecorder : public SoundRecorder {
             }
         }
         k.progressiveChromagram(a, w);
-        cout << get_result(k.keyOfChromagram(w)) << "\n";
         mu.unlock();
         return true;
     }
@@ -108,7 +76,6 @@ int main() {
         return 1;
     }
 
-    std::map<KeyFinder::key_t,key> KeySignature;
     KeySignature[A_FLAT_MINOR] = {"A Flat Minor", "1A", 0xb8ffe1ff};
     KeySignature[E_FLAT_MINOR] = {"E Flat Minor", "2A", 0xc2ffc6ff};
     KeySignature[B_FLAT_MINOR] = {"B Flat Minor", "3A", 0xd2f7a7ff};
@@ -141,7 +108,7 @@ int main() {
 
     CustomRecorder rec;
     rec.start();
-    RenderWindow window(VideoMode(480, 480), "keyfinder_gui");
+    RenderWindow window(VideoMode(WIDTH, HEIGHT), "keyfinder_gui");
     Font font;
     font.loadFromFile("sfns.ttf");
 
@@ -163,6 +130,9 @@ int main() {
         text.setColor(Color::Black);
 
         Text code(KeySignature[key].code, font);
+        FloatRect rect = code.getLocalBounds();
+        code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
+        code.setPosition((float)WIDTH/2.f, (float)HEIGHT/2.f);
         code.setCharacterSize(48);
         code.setColor(Color::Black);
 
@@ -173,13 +143,6 @@ int main() {
     }
 
     rec.stop();
-
-    /* SoundBufferRecorder rec; */
-    /* rec.start(); */
-    /* this_thread::sleep_for(chrono::seconds(2)); */
-    /* rec.stop(); */
-    /* const SoundBuffer& buf = rec.getBuffer(); */
-    /* buf.saveToFile("testout.ogg"); */
 
     return 0;
 }
