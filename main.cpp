@@ -37,7 +37,7 @@ void initWorkspace() {
     a = {};
     w = {};
     a.setFrameRate(44100);
-    a.setChannels(1);
+    a.setChannels(2);
     mu.unlock();
 }
 
@@ -62,17 +62,32 @@ class CustomRecorder : public SoundRecorder {
 };
 
 int main() {
-    cout << "getAvailableDevices:\n";    
-    vector<string> devices = SoundRecorder::getAvailableDevices();
-    for(string device : devices) {
-        cout << device << "\n";
+    if(!SoundRecorder::isAvailable()) {
+        cerr << "SoundRecorder::isAvailable() == false\n";
+        return 1;
     }
-    cout << "\ngetDefaultDevice:\n" << SoundRecorder::getDefaultDevice() << "\n";
 
-    if(SoundRecorder::isAvailable()) {
-        cout << "Can record!\n";
-    } else {
-        cout << "Can *NOT* record :(\n";
+start:
+    vector<string> devices = SoundRecorder::getAvailableDevices();
+    string default_device = SoundRecorder::getDefaultDevice();
+    int i = 0;
+    for(string device : devices) {
+        cout << "[" << i++ << "] " << device;
+        if(device == default_device) {
+            cout << " (default)";
+        }
+        cout << "\n";
+    }
+    cout << "\nCHOOSE A DEVICE: ";
+    int choice;
+    cin >> choice;
+    if(choice >= i) {
+        cerr << "Bzzt.\n";
+        goto start;
+    }
+    CustomRecorder rec;
+    if(!rec.setDevice(devices[choice])) {
+        cerr << "Device selection failed.\n";
         return 1;
     }
 
@@ -106,7 +121,6 @@ int main() {
 
     initWorkspace();
 
-    CustomRecorder rec;
     rec.start();
     RenderWindow window(VideoMode(WIDTH, HEIGHT), "keyfinder_gui");
     Font font;
