@@ -33,12 +33,10 @@ static Workspace w;
 mutex mu;
 
 void initWorkspace() {
-    mu.lock();
     a = {};
     w = {};
     a.setFrameRate(44100);
     a.setChannels(2);
-    mu.unlock();
 }
 
 class CustomRecorder : public SoundRecorder {
@@ -131,6 +129,11 @@ start:
         while(window.pollEvent(e)) {
             if(e.type == sf::Event::Closed) {
                 window.close();
+            }
+            if(e.type == sf::Event::KeyPressed && e.key.code == Keyboard::R) {
+                mu.lock();
+                initWorkspace();
+                mu.unlock();
             }
         }
         window.setActive();
