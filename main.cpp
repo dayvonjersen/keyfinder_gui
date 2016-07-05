@@ -32,6 +32,8 @@ static AudioData a;
 static Workspace w;
 mutex mu;
 
+static KeyFinder::key_t latest_key;
+
 void initWorkspace() {
     a = {};
     w = {};
@@ -54,6 +56,7 @@ class CustomRecorder : public SoundRecorder {
             }
         }
         k.progressiveChromagram(a, w);
+        latest_key = k.keyOfChromagram(w);
         mu.unlock();
         return true;
     }
@@ -68,19 +71,24 @@ int main() {
 start:
     vector<string> devices = SoundRecorder::getAvailableDevices();
     string default_device = SoundRecorder::getDefaultDevice();
+    int default_device_index;
     int i = 0;
     for(string device : devices) {
-        cout << "[" << i++ << "] " << device;
+        cout << "[" << i << "] " << device;
         if(device == default_device) {
+            default_device_index = i;
             cout << " (default)";
         }
+        i++;
         cout << "\n";
     }
     cout << "\nCHOOSE A DEVICE: ";
     int choice;
-    cin >> choice;
-    if(choice >= i) {
-        cerr << "Bzzt.\n";
+    cin >> noskipws >> choice;
+    if(choice == -1) {
+        choice = default_device_index;
+    } else if(choice >= i) {
+        cerr << "Bzzt.\n\n";
         goto start;
     }
     CustomRecorder rec;
@@ -132,28 +140,29 @@ start:
             }
             if(e.type == sf::Event::KeyPressed && e.key.code == Keyboard::R) {
                 mu.lock();
-                initWorkspace();
+                a = {};
+                w = {};
+                a.setFrameRate(44100);
+                a.setChannels(2);
                 mu.unlock();
             }
         }
         window.setActive();
 
-        mu.lock();
-        KeyFinder::key_t key = k.keyOfChromagram(w);
-        mu.unlock();
+        struct key sig = KeySignature[latest_key];
 
-        Text text(KeySignature[key].text, font);
+        Text text(sig.text, font);
         text.setCharacterSize(30);
         text.setColor(Color::Black);
 
-        Text code(KeySignature[key].code, font);
+        Text code(sig.code, font);
         FloatRect rect = code.getLocalBounds();
         code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
         code.setPosition((float)WIDTH/2.f, (float)HEIGHT/2.f);
         code.setCharacterSize(48);
         code.setColor(Color::Black);
 
-        window.clear(Color(KeySignature[key].color));
+        window.clear(Color(sig.color));
         window.draw(text);
         window.draw(code);
         window.display();
