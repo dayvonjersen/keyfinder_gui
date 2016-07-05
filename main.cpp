@@ -1,8 +1,12 @@
 #include <SFML/Audio/SoundRecorder.hpp>
 #include <SFML/Audio/SoundBufferRecorder.hpp>
+#include <SFML/Graphics/RenderWindow.hpp>
+#include <SFML/Graphics/Font.hpp>
+#include <SFML/Graphics/Text.hpp>
+#include <SFML/Window/Event.hpp>
 #include <vector>
 #include <iostream>
-#include "keyfinder/keyfinder.h"
+#include "/usr/local/lib/keyfinder/keyfinder.h"
 #include <thread>
 #include <chrono>
 #include <limits.h>
@@ -49,20 +53,20 @@ static KeyFinder::KeyFinder k;
 static AudioData a;
 static Workspace w;
 
-mutex mx;
+mutex mu;
 
 void initWorkspace() {
-    mx.lock();
+    mu.lock();
     a = {};
     w = {};
     a.setFrameRate(44100);
     a.setChannels(1);
-    mx.unlock();
+    mu.unlock();
 }
 
 class CustomRecorder : public SoundRecorder {
     bool onProcessSamples(const Int16* samples, size_t sampleCount) {
-        mx.lock();
+        mu.lock();
         a.addToSampleCount(sampleCount);
         for(int i = 0; i < sampleCount; i++) {
             double sample = (double)(samples[i] - SHRT_MIN)/(double)(SHRT_MAX - SHRT_MIN);
@@ -70,13 +74,13 @@ class CustomRecorder : public SoundRecorder {
                 a.setSample(i, sample);
             } catch(const Exception& e) {
                 cerr << "Exception:" << e.what() << "\n";
-                mx.unlock();
+                mu.unlock();
                 return false;
             }
         }
         k.progressiveChromagram(a, w);
         cout << get_result(k.keyOfChromagram(w)) << "\n";
-        mx.unlock();
+        mu.unlock();
         return true;
     }
 };
@@ -100,12 +104,32 @@ int main() {
 
     CustomRecorder rec;
     rec.start();
-    this_thread::sleep_for(chrono::seconds(5));
-    initWorkspace();
-    this_thread::sleep_for(chrono::seconds(5));
-    initWorkspace();
-    this_thread::sleep_for(chrono::seconds(5));
-    initWorkspace();
+    RenderWindow window(VideoMode(480, 480), "keyfinder_gui");
+    Font font;
+    font.loadFromFile("sfns.ttf");
+
+    while(window.isOpen()) {
+        sf::Event e;
+        while(window.pollEvent(e)) {
+            if(e.type == sf::Event::Closed) {
+                window.close();
+            }
+        }
+        window.setActive();
+
+        mu.lock();
+        const char* key = get_result(k.keyOfChromagram(w));
+        mu.unlock();
+
+        Text text(key, font);
+        text.setCharacterSize(30);
+        text.setColor(Color::White);
+
+        window.clear();
+        window.draw(text);
+        window.display();
+    }
+
     rec.stop();
 
     /* SoundBufferRecorder rec; */
