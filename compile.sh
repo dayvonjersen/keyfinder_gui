@@ -8,6 +8,7 @@ g++ -std=c++11 \
     -lsfml-window \
     -lsfml-audio \
     -lkeyfinder \
+    -lfftw3 \
     -o $1 \
     "./$1.cpp" \
 && ./$1

@@ -3,6 +3,7 @@
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/Font.hpp>
 #include <SFML/Graphics/Text.hpp>
+#include <SFML/Graphics/VertexArray.hpp>
 #include <SFML/Window/Event.hpp>
 #include <vector>
 #include <iostream>
@@ -12,9 +13,11 @@
 #include <limits.h>
 #include <mutex>
 #include <map>
+#include "fftw3.h"
 
-#define WIDTH  320
-#define HEIGHT 320
+#define WIDTH  320.f
+#define HEIGHT 320.f
+#define INPUT_SIZE 1024
 
 using namespace std;
 using namespace sf;
@@ -33,6 +36,7 @@ static Workspace w;
 mutex mu;
 
 static KeyFinder::key_t latest_key;
+double* INPUT_BUFFER;
 
 void initWorkspace() {
     a = {};
@@ -45,10 +49,21 @@ class CustomRecorder : public SoundRecorder {
     bool onProcessSamples(const Int16* samples, size_t sampleCount) {
         mu.lock();
         a.addToSampleCount(sampleCount);
+        double bounded[sampleCount];
         for(int i = 0; i < sampleCount; i++) {
             double sample = (double)(samples[i] - SHRT_MIN)/(double)(SHRT_MAX - SHRT_MIN);
+            bounded[i] = sample;
+        }
+        for(int i = 0; i < INPUT_SIZE; i++) {
+            if(i >= sampleCount) {
+                INPUT_BUFFER[i] = 0.0;
+            } else {
+                INPUT_BUFFER[i] = bounded[i];
+            }
+        }
+        for(int i = 0; i < sampleCount; i++) {
             try {
-                a.setSample(i, sample);
+                a.setSample(i, bounded[i]);
             } catch(const Exception& e) {
                 cerr << "Exception:" << e.what() << "\n";
                 mu.unlock();
@@ -125,8 +140,12 @@ start:
 
     KeySignature[SILENCE]      = {"(silence)",      "", 0xffffffff};
 
-    initWorkspace();
+    int output_size = INPUT_SIZE/2+1;
+    INPUT_BUFFER = static_cast<double*>(fftw_malloc(INPUT_SIZE*sizeof(double)));
+    fftw_complex *output_buffer = static_cast<fftw_complex*>(fftw_malloc(output_size*sizeof(fftw_complex)));
+    fftw_plan plan = fftw_plan_dft_r2c_1d(INPUT_SIZE, INPUT_BUFFER, output_buffer, FFTW_ESTIMATE);
 
+    initWorkspace();
     rec.start();
     RenderWindow window(VideoMode(WIDTH, HEIGHT), "keyfinder_gui");
     Font font;
@@ -134,18 +153,30 @@ start:
 
     while(window.isOpen()) {
         sf::Event e;
+        bool do_draw = true;
         while(window.pollEvent(e)) {
             if(e.type == sf::Event::Closed) {
                 window.close();
             }
-            if(e.type == sf::Event::KeyPressed && e.key.code == Keyboard::R) {
-                mu.lock();
-                a = {};
-                w = {};
-                a.setFrameRate(44100);
-                a.setChannels(2);
-                mu.unlock();
+            if(e.type == sf::Event::KeyPressed) {
+                switch(e.key.code) {
+                case Keyboard::Q:
+                    window.close();
+                    do_draw = false;
+                    break;
+                case Keyboard::R:
+                    mu.lock();
+                    a = {};
+                    w = {};
+                    a.setFrameRate(44100);
+                    a.setChannels(2);
+                    mu.unlock();
+                    break;
+                }
             }
+        }
+        if(!do_draw) {
+            continue;
         }
         window.setActive();
 
@@ -156,22 +187,36 @@ start:
         text.setColor(Color::Black);
         FloatRect rect = text.getLocalBounds();
         text.setOrigin(rect.left + rect.width/2.f, 0);
-        text.setPosition((float)WIDTH/2.f, 0);
+        text.setPosition(WIDTH/2.f, 0);
 
         Text code(sig.code, font);
         code.setCharacterSize(48);
         code.setColor(Color::Black);
         rect = code.getLocalBounds();
         code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
-        code.setPosition((float)WIDTH/2.f, (float)HEIGHT/2.f);
+        code.setPosition(WIDTH/2.f, HEIGHT/2.f);
 
+        fftw_execute(plan);
+        /* float *peaks; */
+        /* for(int i = 0; i < INPUT_SIZE; i++) { */
+        /*     peaks[i] = output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1]; */
+        /* } */
+        /* VertexArray lines(LinesStrip, INPUT_SIZE); */
+        /* for(int i = 0; i < INPUT_SIZE; i++) { */
+        /*     lines[i].color = Color::Black; */
+        /*     lines[i].position = Vector2f(i, HEIGHT - peaks[i]*HEIGHT); */
+        /* } */
         window.clear(Color(sig.color));
         window.draw(text);
         window.draw(code);
+        /* window.draw(lines); */
         window.display();
     }
 
     rec.stop();
+    fftw_free(INPUT_BUFFER);
+    fftw_free(output_buffer);
+    fftw_destroy_plan(plan);
 
     return 0;
 }
