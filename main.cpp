@@ -1,22 +1,22 @@
-#include <SFML/Audio/SoundRecorder.hpp>
-#include <SFML/Audio/SoundBufferRecorder.hpp>
-#include <SFML/Graphics/RenderWindow.hpp>
-#include <SFML/Graphics/Font.hpp>
-#include <SFML/Graphics/Text.hpp>
-#include <SFML/Graphics/RectangleShape.hpp>
-#include <SFML/Window/Event.hpp>
-#include <vector>
 #include <iostream>
-#include "/usr/local/lib/keyfinder/keyfinder.h"
-#include <thread>
-#include <chrono>
-#include <limits.h>
-#include <mutex>
 #include <map>
-#include "fftw3.h"
+#include <mutex>
+#include <thread>
+#include <vector>
 
-#define WIDTH  320.f
-#define HEIGHT 320.f
+#include <SFML/Audio/SoundBufferRecorder.hpp>
+#include <SFML/Audio/SoundRecorder.hpp>
+#include <SFML/Graphics/Font.hpp>
+#include <SFML/Graphics/RectangleShape.hpp>
+#include <SFML/Graphics/RenderWindow.hpp>
+#include <SFML/Graphics/Text.hpp>
+#include <SFML/Window/Event.hpp>
+
+#include "fftw3.h"
+#include "keyfinder/keyfinder.h"
+
+#define WINDOW_WIDTH  320.f
+#define WINDOW_HEIGHT 320.f
 #define INPUT_SIZE 1024
 
 using namespace std;
@@ -26,7 +26,7 @@ using namespace KeyFinder;
 typedef struct key {
     const char* text;
     const char* code;
-    sf::Uint32  color;
+    Uint32      color;
 } key;
 
 static map<KeyFinder::key_t,key> KeySignature;
@@ -37,6 +37,8 @@ mutex mu;
 
 static KeyFinder::key_t latest_key;
 double* INPUT_BUFFER;
+fftw_complex *output_buffer;
+fftw_plan plan;
 
 void initWorkspace() {
     a = {};
@@ -47,19 +49,15 @@ void initWorkspace() {
 
 class CustomRecorder : public SoundRecorder {
     bool onProcessSamples(const Int16* samples, size_t sampleCount) {
+        cout << sampleCount << "samples\n";
+        double *bounded = (double*)malloc(sampleCount*sizeof(double));
         mu.lock();
         a.addToSampleCount(sampleCount);
-        double bounded[sampleCount];
         for(int i = 0; i < sampleCount; i++) {
-            double sample = (double)(samples[i] - SHRT_MIN)/(double)(SHRT_MAX - SHRT_MIN);
-            bounded[i] = sample;
+            bounded[i] = ((double)samples[i] + 32768.0)/65535.0;
         }
         for(int i = 0; i < INPUT_SIZE; i++) {
-            if(i >= sampleCount) {
-                INPUT_BUFFER[i] = 0.0;
-            } else {
-                INPUT_BUFFER[i] = bounded[i];
-            }
+            INPUT_BUFFER[i] =(i >= sampleCount) ? 0.0 : bounded[i];
         }
         for(int i = 0; i < sampleCount; i++) {
             try {
@@ -67,12 +65,15 @@ class CustomRecorder : public SoundRecorder {
             } catch(const Exception& e) {
                 cerr << "Exception:" << e.what() << "\n";
                 mu.unlock();
+                free(bounded);
                 return false;
             }
         }
         k.progressiveChromagram(a, w);
         latest_key = k.keyOfChromagram(w);
         mu.unlock();
+        free(bounded);
+        fftw_execute(plan);
         return true;
     }
 };
@@ -142,12 +143,12 @@ start:
 
     int output_size = INPUT_SIZE/2+1;
     INPUT_BUFFER = static_cast<double*>(fftw_malloc(INPUT_SIZE*sizeof(double)));
-    fftw_complex *output_buffer = static_cast<fftw_complex*>(fftw_malloc(output_size*sizeof(fftw_complex)));
-    fftw_plan plan = fftw_plan_dft_r2c_1d(INPUT_SIZE, INPUT_BUFFER, output_buffer, FFTW_ESTIMATE);
+    output_buffer = static_cast<fftw_complex*>(fftw_malloc(output_size*sizeof(fftw_complex)));
+    plan = fftw_plan_dft_r2c_1d(INPUT_SIZE, INPUT_BUFFER, output_buffer, FFTW_ESTIMATE);
 
     initWorkspace();
     rec.start();
-    RenderWindow window(VideoMode(WIDTH, HEIGHT), "keyfinder_gui");
+    RenderWindow window(VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "keyfinder_gui");
     Font font;
     font.loadFromFile("sfns.ttf");
 
@@ -166,11 +167,17 @@ start:
                     break;
                 case Keyboard::R:
                     mu.lock();
-                    a = {};
-                    w = {};
-                    a.setFrameRate(44100);
-                    a.setChannels(2);
+                    initWorkspace();
                     mu.unlock();
+                    Text text("(reset)", font);
+                    text.setCharacterSize(30);
+                    text.setColor(Color::White);
+                    FloatRect rect = text.getLocalBounds();
+                    text.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
+                    text.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
+                    window.clear(Color::Black);
+                    window.draw(text);
+                    window.display();
                     break;
                 }
             }
@@ -187,34 +194,34 @@ start:
         text.setColor(Color::Black);
         FloatRect rect = text.getLocalBounds();
         text.setOrigin(rect.left + rect.width/2.f, 0);
-        text.setPosition(WIDTH/2.f, 0);
+        text.setPosition(WINDOW_WIDTH/2.f, 0);
 
         Text code(sig.code, font);
         code.setCharacterSize(48);
         code.setColor(Color::Black);
         rect = code.getLocalBounds();
         code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
-        code.setPosition(WIDTH/2.f, HEIGHT/2.f);
+        code.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
 
         window.clear(Color(sig.color));
         window.draw(text);
         window.draw(code);
 
-        fftw_execute(plan);
         float *peaks = (float*)(malloc(output_size*sizeof(float)));
         for(int i = 0; i < output_size; i++) {
             peaks[i] = output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1];
         }
+        float ratio = INPUT_SIZE/WINDOW_WIDTH;
         for(int i = 0; i < output_size; i++) {
             RectangleShape bar;
-            bar.setSize(Vector2f(1, peaks[i]*HEIGHT));
+            float height = peaks[i]*WINDOW_HEIGHT;
+            bar.setSize(Vector2f(1, height));
             bar.setOutlineColor(Color::Red);
             bar.setOutlineThickness(1);
-            bar.setPosition(i, 0);
+            bar.setPosition((i+1)*ratio, WINDOW_HEIGHT-height);
             window.draw(bar);
         }
         free(peaks);
-        /* window.draw(lines); */
         window.display();
     }
 
