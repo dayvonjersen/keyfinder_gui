@@ -3,7 +3,7 @@
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/Font.hpp>
 #include <SFML/Graphics/Text.hpp>
-#include <SFML/Graphics/VertexArray.hpp>
+#include <SFML/Graphics/RectangleShape.hpp>
 #include <SFML/Window/Event.hpp>
 #include <vector>
 #include <iostream>
@@ -196,20 +196,24 @@ start:
         code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
         code.setPosition(WIDTH/2.f, HEIGHT/2.f);
 
+        window.clear(Color(sig.color));
+        window.draw(text);
+        window.draw(code);
+
         fftw_execute(plan);
         float *peaks = (float*)(malloc(output_size*sizeof(float)));
         for(int i = 0; i < output_size; i++) {
             peaks[i] = output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1];
         }
-        VertexArray lines(LinesStrip, output_size);
         for(int i = 0; i < output_size; i++) {
-            lines[i].color = Color::Black;
-            lines[i].position = Vector2f(HEIGHT, HEIGHT - peaks[i]*HEIGHT*20);
+            RectangleShape bar;
+            bar.setSize(Vector2f(1, peaks[i]*HEIGHT));
+            bar.setOutlineColor(Color::Red);
+            bar.setOutlineThickness(1);
+            bar.setPosition(i, 0);
+            window.draw(bar);
         }
         free(peaks);
-        window.clear(Color(sig.color));
-        window.draw(text);
-        window.draw(code);
         /* window.draw(lines); */
         window.display();
     }
