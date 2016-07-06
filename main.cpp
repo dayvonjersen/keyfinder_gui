@@ -197,15 +197,16 @@ start:
         code.setPosition(WIDTH/2.f, HEIGHT/2.f);
 
         fftw_execute(plan);
-        /* float *peaks; */
-        /* for(int i = 0; i < INPUT_SIZE; i++) { */
-        /*     peaks[i] = output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1]; */
-        /* } */
-        /* VertexArray lines(LinesStrip, INPUT_SIZE); */
-        /* for(int i = 0; i < INPUT_SIZE; i++) { */
-        /*     lines[i].color = Color::Black; */
-        /*     lines[i].position = Vector2f(i, HEIGHT - peaks[i]*HEIGHT); */
-        /* } */
+        float *peaks = (float*)(malloc(output_size*sizeof(float)));
+        for(int i = 0; i < output_size; i++) {
+            peaks[i] = output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1];
+        }
+        VertexArray lines(LinesStrip, output_size);
+        for(int i = 0; i < output_size; i++) {
+            lines[i].color = Color::Black;
+            lines[i].position = Vector2f(HEIGHT, HEIGHT - peaks[i]*HEIGHT*20);
+        }
+        free(peaks);
         window.clear(Color(sig.color));
         window.draw(text);
         window.draw(code);
