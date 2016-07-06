@@ -57,7 +57,8 @@ class CustomRecorder : public SoundRecorder {
             bounded[i] = ((double)samples[i] + 32768.0)/65535.0;
         }
         for(int i = 0; i < INPUT_SIZE; i++) {
-            INPUT_BUFFER[i] =(i >= sampleCount) ? 0.0 : bounded[i];
+            if(i >= sampleCount) break;
+            INPUT_BUFFER[i] = bounded[i];
         }
         for(int i = 0; i < sampleCount; i++) {
             try {
@@ -149,6 +150,7 @@ start:
     initWorkspace();
     rec.start();
     RenderWindow window(VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "keyfinder_gui");
+    window.setFramerateLimit(30);
     Font font;
     font.loadFromFile("sfns.ttf");
 
@@ -216,7 +218,8 @@ start:
             RectangleShape bar;
             float height = peaks[i]*WINDOW_HEIGHT;
             bar.setSize(Vector2f(1, height));
-            bar.setOutlineColor(Color::Red);
+            bar.setFillColor(Color(sig.color));
+            bar.setOutlineColor(Color::Black);
             bar.setOutlineThickness(1);
             bar.setPosition((i+1)*ratio, WINDOW_HEIGHT-height);
             window.draw(bar);
