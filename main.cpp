@@ -173,7 +173,7 @@ start:
                     mu.unlock();
                     Text text("(reset)", font);
                     text.setCharacterSize(30);
-                    text.setColor(Color::White);
+                    text.setFillColor(Color::White);
                     FloatRect rect = text.getLocalBounds();
                     text.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
                     text.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
@@ -193,14 +193,14 @@ start:
 
         Text text(sig.text, font);
         text.setCharacterSize(30);
-        text.setColor(Color::Black);
+        text.setFillColor(Color::Black);
         FloatRect rect = text.getLocalBounds();
         text.setOrigin(rect.left + rect.width/2.f, 0);
         text.setPosition(WINDOW_WIDTH/2.f, 0);
 
         Text code(sig.code, font);
         code.setCharacterSize(48);
-        code.setColor(Color::Black);
+        code.setFillColor(Color::Black);
         rect = code.getLocalBounds();
         code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
         code.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
