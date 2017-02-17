@@ -49,7 +49,6 @@ void initWorkspace() {
 
 class CustomRecorder : public SoundRecorder {
     bool onProcessSamples(const Int16* samples, size_t sampleCount) {
-        cout << sampleCount << "samples\n";
         double *bounded = (double*)malloc(sampleCount*sizeof(double));
         mu.lock();
         a.addToSampleCount(sampleCount);
