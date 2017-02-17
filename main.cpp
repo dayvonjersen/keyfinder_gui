@@ -70,7 +70,12 @@ class CustomRecorder : public SoundRecorder {
             }
         }
         k.progressiveChromagram(a, w);
-        latest_key = k.keyOfChromagram(w);
+        KeyFinder::key_t key = k.keyOfChromagram(w);
+        if(latest_key != key) {
+            latest_key = key;
+            struct key sig = KeySignature[latest_key];
+            cout << a.getSampleCount() << " " << sig.text << endl;
+        }
         mu.unlock();
         free(bounded);
         fftw_execute(plan);
