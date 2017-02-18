@@ -146,7 +146,7 @@ start:
 
     KeySignature[SILENCE]      = {"(silence)",      "", 0xffffffff};
 
-    int output_size = INPUT_SIZE/2+1;
+    int output_size = INPUT_SIZE/2;
     INPUT_BUFFER = static_cast<double*>(fftw_malloc(INPUT_SIZE*sizeof(double)));
     output_buffer = static_cast<fftw_complex*>(fftw_malloc(output_size*sizeof(fftw_complex)));
     plan = fftw_plan_dft_r2c_1d(INPUT_SIZE, INPUT_BUFFER, output_buffer, FFTW_ESTIMATE);
@@ -154,7 +154,7 @@ start:
     initWorkspace();
     rec.start();
     RenderWindow window(VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "keyfinder_gui");
-    window.setFramerateLimit(30);
+    window.setFramerateLimit(60);
     Font font;
     font.loadFromFile("sfns.ttf");
 
@@ -215,17 +215,29 @@ start:
 
         float *peaks = (float*)(malloc(output_size*sizeof(float)));
         for(int i = 0; i < output_size; i++) {
-            peaks[i] = output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1];
+            peaks[i] = sqrt(output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1]);
         }
         float ratio = INPUT_SIZE/WINDOW_WIDTH;
-        for(int i = 0; i < output_size; i++) {
+        float BARS = 16.f;
+        int interval = (int)(output_size / BARS);
+        for(int i = 0; i < 16; i++) {
+            float sum = 0;
+            for(int j = 0; j < interval; j++) {
+                if(i==0&&j==0) continue; 
+                sum += peaks[j + i*interval];
+            }
+            float avg = sum / interval;
+            
             RectangleShape bar;
-            float height = peaks[i]*WINDOW_HEIGHT;
-            bar.setSize(Vector2f(1, height));
-            bar.setFillColor(Color(sig.color));
-            bar.setOutlineColor(Color::Black);
-            bar.setOutlineThickness(1);
-            bar.setPosition((i+1)*ratio, WINDOW_HEIGHT-height);
+            bar.setSize(Vector2f(WINDOW_WIDTH/16.f, WINDOW_HEIGHT*avg));
+            bar.setFillColor( i & 1 ? Color::White : Color::Black );
+            bar.setPosition(i*WINDOW_WIDTH/16.f, WINDOW_HEIGHT - WINDOW_HEIGHT*avg);
+            /* float height = peaks[i]*WINDOW_HEIGHT; */
+            /* bar.setSize(Vector2f(1, height)); */
+            /* bar.setFillColor(Color(sig.color)); */
+            /* bar.setOutlineColor(Color::Black); */
+            /* bar.setOutlineThickness(1); */
+            /* bar.setPosition((i+1)*ratio, WINDOW_HEIGHT-height); */
             window.draw(bar);
         }
         free(peaks);
