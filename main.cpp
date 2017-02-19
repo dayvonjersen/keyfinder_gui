@@ -33,7 +33,8 @@ static map<KeyFinder::key_t,key> KeySignature;
 static KeyFinder::KeyFinder k;
 static AudioData a;
 static Workspace w;
-mutex mu;
+mutex fft_mu;
+mutex key_mu;
 
 static KeyFinder::key_t latest_key;
 double* INPUT_BUFFER;
@@ -47,38 +48,49 @@ void initWorkspace() {
     a.setChannels(2);
 }
 
+void do_fft(double* bounded, size_t sampleCount) {
+    fft_mu.lock();
+    for(int i = 0; i < INPUT_SIZE; i++) {
+        if(i >= sampleCount) break;
+        INPUT_BUFFER[i] = bounded[i];
+    }
+    fft_mu.unlock();
+    fftw_execute(plan);
+}
+
+void do_keyfind(double* bounded, size_t sampleCount) {
+    key_mu.lock();
+    a.addToSampleCount(sampleCount);
+    for(int i = 0; i < sampleCount; i++) {
+        try {
+            a.setSample(i, bounded[i]);
+        } catch(const Exception& e) {
+            cerr << "Exception:" << e.what() << "\n";
+            key_mu.unlock();
+            return;
+        }
+    }
+    k.progressiveChromagram(a, w);
+    KeyFinder::key_t key = k.keyOfChromagram(w);
+    if(latest_key != key) {
+        latest_key = key;
+        struct key sig = KeySignature[latest_key];
+        cout << a.getSampleCount() << " " << sig.text << endl;
+    }
+    key_mu.unlock();
+}
+
 class CustomRecorder : public SoundRecorder {
     bool onProcessSamples(const Int16* samples, size_t sampleCount) {
         double *bounded = (double*)malloc(sampleCount*sizeof(double));
-        mu.lock();
-        a.addToSampleCount(sampleCount);
         for(int i = 0; i < sampleCount; i++) {
             bounded[i] = ((double)samples[i] + 32768.0)/65535.0;
         }
-        for(int i = 0; i < INPUT_SIZE; i++) {
-            if(i >= sampleCount) break;
-            INPUT_BUFFER[i] = bounded[i];
-        }
-        for(int i = 0; i < sampleCount; i++) {
-            try {
-                a.setSample(i, bounded[i]);
-            } catch(const Exception& e) {
-                cerr << "Exception:" << e.what() << "\n";
-                mu.unlock();
-                free(bounded);
-                return false;
-            }
-        }
-        k.progressiveChromagram(a, w);
-        KeyFinder::key_t key = k.keyOfChromagram(w);
-        if(latest_key != key) {
-            latest_key = key;
-            struct key sig = KeySignature[latest_key];
-            cout << a.getSampleCount() << " " << sig.text << endl;
-        }
-        mu.unlock();
+        std::thread t1(do_fft, bounded, sampleCount);
+        std::thread t2(do_keyfind, bounded, sampleCount);
+        t1.join();
+        t2.join();
         free(bounded);
-        fftw_execute(plan);
         return true;
     }
 };
@@ -172,9 +184,9 @@ start:
                     do_draw = false;
                     break;
                 case Keyboard::R:
-                    mu.lock();
+                    key_mu.lock();
                     initWorkspace();
-                    mu.unlock();
+                    key_mu.unlock();
                     Text text("(reset)", font);
                     text.setCharacterSize(30);
                     text.setFillColor(Color::White);
