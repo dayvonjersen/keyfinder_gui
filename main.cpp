@@ -84,7 +84,10 @@ class CustomRecorder : public SoundRecorder {
     bool onProcessSamples(const Int16* samples, size_t sampleCount) {
         double *bounded = (double*)malloc(sampleCount*sizeof(double));
         for(int i = 0; i < sampleCount; i++) {
-            bounded[i] = ((double)samples[i] + 32768.0)/65535.0;
+            double samp = ((double)samples[i] / 32768.0);
+            if(samp > 1)  samp = 1;
+            if(samp < -1) samp = -1;
+            bounded[i] = samp;
         }
         std::thread t1(do_fft, bounded, sampleCount);
         std::thread t2(do_keyfind, bounded, sampleCount);
@@ -94,6 +97,10 @@ class CustomRecorder : public SoundRecorder {
         return true;
     }
 };
+
+float mapValue(float val, float in_min, float in_max, float out_min, float out_max) {
+  return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 int main() {
     if(!SoundRecorder::isAvailable()) {
@@ -221,13 +228,29 @@ start:
         code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
         code.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
 
-        window.clear(Color(sig.color));
+        window.clear(Color::White);
         window.draw(text);
         window.draw(code);
 
         float *peaks = (float*)(malloc(output_size*sizeof(float)));
+        float min = 0.0;
+        float max = 0.0;
         for(int i = 0; i < output_size; i++) {
-            peaks[i] = sqrt(output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1]);
+            float peak = sqrt(output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1]);
+            peak = 2*peak/output_size;
+            peak = 20 * log10(peak);
+            peaks[i] = peak;
+            if(!max || peak > max) {
+                max = peak;
+            }
+            if(!min || peak < min) {
+                min = peak;
+            }
+        }
+        peaks[0] = 0.0;
+        for(int i = 0; i < output_size; i++) {
+            float peak = mapValue(peaks[i], min, max, 0.0, 1.0);
+            peaks[i] = peak;
         }
         float ratio = INPUT_SIZE/WINDOW_WIDTH;
         float BARS = 16.f;
@@ -235,21 +258,14 @@ start:
         for(int i = 0; i < 16; i++) {
             float sum = 0;
             for(int j = 0; j < interval; j++) {
-                if(i==0&&j==0) continue; 
                 sum += peaks[j + i*interval];
             }
             float avg = sum / interval;
             
             RectangleShape bar;
             bar.setSize(Vector2f(WINDOW_WIDTH/16.f, WINDOW_HEIGHT*avg));
-            bar.setFillColor( i & 1 ? Color::White : Color::Black );
+            bar.setFillColor(Color(sig.color));
             bar.setPosition(i*WINDOW_WIDTH/16.f, WINDOW_HEIGHT - WINDOW_HEIGHT*avg);
-            /* float height = peaks[i]*WINDOW_HEIGHT; */
-            /* bar.setSize(Vector2f(1, height)); */
-            /* bar.setFillColor(Color(sig.color)); */
-            /* bar.setOutlineColor(Color::Black); */
-            /* bar.setOutlineThickness(1); */
-            /* bar.setPosition((i+1)*ratio, WINDOW_HEIGHT-height); */
             window.draw(bar);
         }
         free(peaks);
