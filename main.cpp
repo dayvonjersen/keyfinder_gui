@@ -3,6 +3,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <cstring>
 
 #include <SFML/Audio/SoundBufferRecorder.hpp>
 #include <SFML/Audio/SoundRecorder.hpp>
@@ -12,270 +13,155 @@
 #include <SFML/Graphics/Text.hpp>
 #include <SFML/Window/Event.hpp>
 
-#include "fftw3.h"
-#include "keyfinder/keyfinder.h"
+#include "./fft.cc"
 
 #define WINDOW_WIDTH  320.f
 #define WINDOW_HEIGHT 320.f
-#define INPUT_SIZE 1024
+#define NUM_BANDS 32
+#define DB_RANGE 40
+static float logscale[NUM_BANDS + 1];
+static float s_bars[NUM_BANDS];
 
-using namespace std;
-using namespace sf;
-using namespace KeyFinder;
+static void make_log_graph (const float* freq, float* graph) {
+    for (int i = 0; i < NUM_BANDS; i++) {
+        /* sum up values in freq array between logscale[i] and logscale[i + 1],
+           including fractional parts */
+        int a = ceilf (logscale[i]);
+        int b = floorf (logscale[i + 1]);
+        float sum = 0;
 
-typedef struct key {
-    const char* text;
-    const char* code;
-    Uint32      color;
-} key;
-
-static map<KeyFinder::key_t,key> KeySignature;
-static KeyFinder::KeyFinder k;
-static AudioData a;
-static Workspace w;
-mutex fft_mu;
-mutex key_mu;
-
-static KeyFinder::key_t latest_key;
-double* INPUT_BUFFER;
-fftw_complex *output_buffer;
-fftw_plan plan;
-
-void initWorkspace() {
-    a = {};
-    w = {};
-    a.setFrameRate(44100);
-    a.setChannels(2);
-}
-
-void do_fft(double* bounded, size_t sampleCount) {
-    fft_mu.lock();
-    for(int i = 0; i < INPUT_SIZE; i++) {
-        if(i >= sampleCount) break;
-        INPUT_BUFFER[i] = bounded[i];
-    }
-    fft_mu.unlock();
-    fftw_execute(plan);
-}
-
-void do_keyfind(double* bounded, size_t sampleCount) {
-    key_mu.lock();
-    a.addToSampleCount(sampleCount);
-    for(int i = 0; i < sampleCount; i++) {
-        try {
-            a.setSample(i, bounded[i]);
-        } catch(const Exception& e) {
-            cerr << "Exception:" << e.what() << "\n";
-            key_mu.unlock();
-            return;
+        if (b < a) {
+            sum += freq[b] * (logscale[i + 1] - logscale[i]);
+        } else {
+            if (a > 0) {
+                sum += freq[a - 1] * (a - logscale[i]);
+            }
+            for (; a < b; a ++) {
+                sum += freq[a];
+            }
+            if (b < 256) {
+                sum += freq[b] * (logscale[i + 1] - b);
+            }
         }
+
+        /* fudge factor to make the graph have the same overall height as a
+           12-band one no matter how many bands there are */
+        sum *= (float) NUM_BANDS / 12;
+
+        /* convert to dB */
+        float val = 20 * log10f (sum);
+
+        /* scale (-DB_RANGE, 0.0) to (0.0, 1.0) */
+        val = 1 + val / DB_RANGE;
+
+        if(val < 0.0f) val = 0.0f;
+        if(val > 1.0f) val = 1.0f;
+        graph[i] = val; 
     }
-    k.progressiveChromagram(a, w);
-    KeyFinder::key_t key = k.keyOfChromagram(w);
-    if(latest_key != key) {
-        latest_key = key;
-        struct key sig = KeySignature[latest_key];
-        cout << a.getSampleCount() << " " << sig.text << endl;
-    }
-    key_mu.unlock();
 }
 
-class CustomRecorder : public SoundRecorder {
-    bool onProcessSamples(const Int16* samples, size_t sampleCount) {
-        double *bounded = (double*)malloc(sampleCount*sizeof(double));
-        for(int i = 0; i < sampleCount; i++) {
-            double samp = ((double)samples[i] / 32768.0);
-            if(samp > 1)  samp = 1;
-            if(samp < -1) samp = -1;
-            bounded[i] = samp;
-        }
-        std::thread t1(do_fft, bounded, sampleCount);
-        std::thread t2(do_keyfind, bounded, sampleCount);
-        t1.join();
-        t2.join();
-        free(bounded);
-        return true;
-    }
+class CustomRecorder : public sf::SoundRecorder {
+    public:
+        bool onProcessSamples(const sf::Int16* samples, size_t sampleCount);
 };
 
-float mapValue(float val, float in_min, float in_max, float out_min, float out_max) {
-  return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+bool CustomRecorder::onProcessSamples(const sf::Int16* samples, size_t sampleCount) {
+    /* std::memset(s_bars, 0, sizeof(s_bars)); */
+
+    float *bounded = (float*)malloc(sampleCount*sizeof(float));
+    for(int i = 0; i < sampleCount; i++) {
+        float samp = ((float)samples[i] / 32768.0);
+        if(samp > 1)  samp = 1;
+        if(samp < -1) samp = -1;
+        bounded[i] = samp;
+    }
+
+    float *mono = (float*)malloc(512*sizeof(float));
+    float *freq = (float*)malloc(256*sizeof(float));
+    for(int i = 0; i < sampleCount; i+=256) {
+
+        for(int j = 0; j < 512; j++) {
+            if(i+j >= sampleCount) goto done;
+            mono[j] = i+j < sampleCount ? bounded[i+j] : 0.0f;
+        }
+
+        calc_freq(mono, freq);
+        make_log_graph(freq, s_bars);
+
+    }    
+done:
+    free(mono);
+    free(freq);
+    free(bounded);
+    return true;
 }
 
+
 int main() {
-    if(!SoundRecorder::isAvailable()) {
-        cerr << "SoundRecorder::isAvailable() == false\n";
+    for(int i = 0; i <= NUM_BANDS; i++) {
+        logscale[i] = powf(256, (float) i /NUM_BANDS) - 0.5f;
+    }
+    std::memset(s_bars, 0, sizeof(s_bars));
+
+    /* {{{ */
+    if(!sf::SoundRecorder::isAvailable()) {
+        std::cerr << "sf::SoundRecorder::isAvailable() == false\n";
         return 1;
     }
-
 start:
-    vector<string> devices = SoundRecorder::getAvailableDevices();
-    string default_device = SoundRecorder::getDefaultDevice();
+    std::vector<std::string> devices = sf::SoundRecorder::getAvailableDevices();
+    std::string default_device = sf::SoundRecorder::getDefaultDevice();
     int default_device_index;
     int i = 0;
-    for(string device : devices) {
-        cout << "[" << i << "] " << device;
+    for(std::string device : devices) {
+        std::cout << "[" << i << "] " << device;
         if(device == default_device) {
             default_device_index = i;
-            cout << " (default)";
+            std::cout << " (default)";
         }
         i++;
-        cout << "\n";
+        std::cout << "\n";
     }
-    cout << "\nCHOOSE A DEVICE: ";
+    std::cout << "\nCHOOSE A DEVICE: ";
     int choice;
-    cin >> noskipws >> choice;
+    std::cin >> std::noskipws >> choice;
     if(choice == -1) {
         choice = default_device_index;
     } else if(choice >= i) {
-        cerr << "Bzzt.\n\n";
+        std::cerr << "Bzzt.\n\n";
         goto start;
     }
     CustomRecorder rec;
     if(!rec.setDevice(devices[choice])) {
-        cerr << "Device selection failed.\n";
+        std::cerr << "Device selection failed.\n";
         return 1;
     }
+    /* 
+     * }}} */
  
-    KeySignature[A_FLAT_MINOR] = {"A Flat Minor",   "1A", 0xb8ffe1ff};
-    KeySignature[E_FLAT_MINOR] = {"E Flat Minor",   "2A", 0xc2ffc6ff};
-    KeySignature[B_FLAT_MINOR] = {"B Flat Minor",   "3A", 0xd2f7a7ff};
-    KeySignature[F_MINOR]      = {"F Minor",        "4A", 0xe4e2a9ff};
-    KeySignature[C_MINOR]      = {"C Minor",        "5A", 0xf6c4abff};
-    KeySignature[G_MINOR]      = {"G Minor",        "6A", 0xffafb8ff};
-    KeySignature[D_MINOR]      = {"D Minor",        "7A", 0xf7aeccff};
-    KeySignature[A_MINOR]      = {"A Minor",        "8A", 0xe2aeecff};
-    KeySignature[E_MINOR]      = {"E Minor",        "9A", 0xd1aefeff};
-    KeySignature[B_MINOR]      = {"B Minor",       "10A", 0xc5c1feff};
-    KeySignature[G_FLAT_MINOR] = {"F Sharp Minor", "11A", 0xb6e5ffff};
-    KeySignature[D_FLAT_MINOR] = {"D Flat Minor",  "12A", 0xaefefdff};
-
-    KeySignature[B_MAJOR]      = {"B Major",       "1B", 0x8effd1ff};
-    KeySignature[G_FLAT_MAJOR] = {"F Sharp Major", "2B", 0x9fff9eff};
-    KeySignature[D_FLAT_MAJOR] = {"D Flat Major",  "3B", 0xbaf976ff};
-    KeySignature[A_FLAT_MAJOR] = {"A Flat Major",  "4B", 0xd5ce74ff};
-    KeySignature[E_FLAT_MAJOR] = {"E Flat Major",  "5B", 0xf3a47bff};
-    KeySignature[B_FLAT_MAJOR] = {"B Flat Major",  "6B", 0xff7988ff};
-    KeySignature[F_MAJOR]      = {"F Major",       "7B", 0xf079b1ff};
-    KeySignature[C_MAJOR]      = {"C Major",       "8B", 0xcf7fe2ff};
-    KeySignature[G_MAJOR]      = {"G Major",       "9B", 0xb67fffff};
-    KeySignature[D_MAJOR]      = {"D Major",      "10B", 0x9fa4ffff};
-    KeySignature[A_MAJOR]      = {"A Major",      "11B", 0x82dfffff};
-    KeySignature[E_MAJOR]      = {"E Major",      "12B", 0x7efffbff};
-
-    KeySignature[SILENCE]      = {"(silence)",      "", 0xffffffff};
-
-    int output_size = INPUT_SIZE/2;
-    INPUT_BUFFER = static_cast<double*>(fftw_malloc(INPUT_SIZE*sizeof(double)));
-    output_buffer = static_cast<fftw_complex*>(fftw_malloc(output_size*sizeof(fftw_complex)));
-    plan = fftw_plan_dft_r2c_1d(INPUT_SIZE, INPUT_BUFFER, output_buffer, FFTW_ESTIMATE);
-
-    initWorkspace();
     rec.start();
-    RenderWindow window(VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "keyfinder_gui");
+    sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "fixing fft");
     window.setFramerateLimit(60);
-    Font font;
-    font.loadFromFile("sfns.ttf");
 
     while(window.isOpen()) {
         sf::Event e;
-        bool do_draw = true;
         while(window.pollEvent(e)) {
-            if(e.type == sf::Event::Closed) {
+            if(e.type == sf::Event::Closed || (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Q)) {
                 window.close();
             }
-            if(e.type == sf::Event::KeyPressed) {
-                switch(e.key.code) {
-                case Keyboard::Q:
-                    window.close();
-                    do_draw = false;
-                    break;
-                case Keyboard::R:
-                    key_mu.lock();
-                    initWorkspace();
-                    key_mu.unlock();
-                    Text text("(reset)", font);
-                    text.setCharacterSize(30);
-                    text.setFillColor(Color::White);
-                    FloatRect rect = text.getLocalBounds();
-                    text.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
-                    text.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
-                    window.clear(Color::Black);
-                    window.draw(text);
-                    window.display();
-                    break;
-                }
-            }
-        }
-        if(!do_draw) {
-            continue;
         }
         window.setActive();
-
-        struct key sig = KeySignature[latest_key];
-
-        Text text(sig.text, font);
-        text.setCharacterSize(30);
-        text.setFillColor(Color::Black);
-        FloatRect rect = text.getLocalBounds();
-        text.setOrigin(rect.left + rect.width/2.f, 0);
-        text.setPosition(WINDOW_WIDTH/2.f, 0);
-
-        Text code(sig.code, font);
-        code.setCharacterSize(48);
-        code.setFillColor(Color::Black);
-        rect = code.getLocalBounds();
-        code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
-        code.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
-
-        window.clear(Color::White);
-        window.draw(text);
-        window.draw(code);
-
-        float *peaks = (float*)(malloc(output_size*sizeof(float)));
-        float min = 0.0;
-        float max = 0.0;
-        for(int i = 0; i < output_size; i++) {
-            float peak = sqrt(output_buffer[i][0]*output_buffer[i][0] + output_buffer[i][1]*output_buffer[i][1]);
-            peak = 2*peak/output_size;
-            peak = 20 * log10(peak);
-            peaks[i] = peak;
-            if(!max || peak > max) {
-                max = peak;
-            }
-            if(!min || peak < min) {
-                min = peak;
-            }
-        }
-        peaks[0] = 0.0;
-        for(int i = 0; i < output_size; i++) {
-            float peak = mapValue(peaks[i], min, max, 0.0, 1.0);
-            peaks[i] = peak;
-        }
-        float ratio = INPUT_SIZE/WINDOW_WIDTH;
-        float BARS = 16.f;
-        int interval = (int)(output_size / BARS);
-        for(int i = 0; i < 16; i++) {
-            float sum = 0;
-            for(int j = 0; j < interval; j++) {
-                sum += peaks[j + i*interval];
-            }
-            float avg = sum / interval;
-            
-            RectangleShape bar;
-            bar.setSize(Vector2f(WINDOW_WIDTH/16.f, WINDOW_HEIGHT*avg));
-            bar.setFillColor(Color(sig.color));
-            bar.setPosition(i*WINDOW_WIDTH/16.f, WINDOW_HEIGHT - WINDOW_HEIGHT*avg);
+        window.clear(sf::Color::White);            
+        for(int i = 0; i < NUM_BANDS; i++) {
+            sf::RectangleShape bar;
+            bar.setSize(sf::Vector2f(WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT*s_bars[i]));
+            bar.setFillColor(sf::Color::Black);
+            bar.setPosition(i*WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT - WINDOW_HEIGHT*s_bars[i]);
             window.draw(bar);
         }
-        free(peaks);
         window.display();
     }
-
     rec.stop();
-    fftw_free(INPUT_BUFFER);
-    fftw_free(output_buffer);
-    fftw_destroy_plan(plan);
 
     return 0;
 }
