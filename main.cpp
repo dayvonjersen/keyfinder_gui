@@ -82,7 +82,7 @@ bool CustomRecorder::onProcessSamples(const sf::Int16* samples, size_t sampleCou
 
         for(int j = 0; j < 512; j++) {
             if(i+j >= sampleCount) goto done;
-            mono[j] = i+j < sampleCount ? bounded[i+j] : 0.0f;
+            mono[j] = bounded[i+j];
         }
 
         calc_freq(mono, freq);
@@ -141,7 +141,6 @@ start:
  
     rec.start();
     sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "fixing fft");
-    window.setFramerateLimit(60);
 
     while(window.isOpen()) {
         sf::Event e;
