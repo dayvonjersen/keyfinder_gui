@@ -8,7 +8,6 @@ all:
 		-lsfml-window \
 		-lsfml-audio \
 		-lkeyfinder \
-		-lfftw3 \
 		-lpthread \
 		-o main \
 		main.cpp 

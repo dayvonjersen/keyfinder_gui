@@ -4,15 +4,13 @@
 #include <thread>
 #include <vector>
 #include <cstring>
+#include <exception>
 
-#include <SFML/Audio/SoundBufferRecorder.hpp>
-#include <SFML/Audio/SoundRecorder.hpp>
-#include <SFML/Graphics/Font.hpp>
-#include <SFML/Graphics/RectangleShape.hpp>
-#include <SFML/Graphics/RenderWindow.hpp>
-#include <SFML/Graphics/Text.hpp>
-#include <SFML/Window/Event.hpp>
+#include <SFML/Audio.hpp>
+#include <SFML/Graphics.hpp>
+#include <SFML/Window.hpp>
 
+#include "keyfinder/keyfinder.h"
 #include "./fft.cc"
 
 #define WINDOW_WIDTH  320.f
@@ -60,14 +58,89 @@ static void make_log_graph (const float* freq, float* graph) {
     }
 }
 
+struct KeySignature {
+    const char*  text;
+    const char*  code;
+    unsigned int color;
+};
+
+static std::map<KeyFinder::key_t, KeySignature> KeySignatureMap;
+
+void initKeySignatureMap() {
+    KeySignatureMap[KeyFinder::A_FLAT_MINOR] = {"A Flat Minor",   "1A", 0xb8ffe1ff};
+    KeySignatureMap[KeyFinder::E_FLAT_MINOR] = {"E Flat Minor",   "2A", 0xc2ffc6ff};
+    KeySignatureMap[KeyFinder::B_FLAT_MINOR] = {"B Flat Minor",   "3A", 0xd2f7a7ff};
+    KeySignatureMap[KeyFinder::F_MINOR]      = {"F Minor",        "4A", 0xe4e2a9ff};
+    KeySignatureMap[KeyFinder::C_MINOR]      = {"C Minor",        "5A", 0xf6c4abff};
+    KeySignatureMap[KeyFinder::G_MINOR]      = {"G Minor",        "6A", 0xffafb8ff};
+    KeySignatureMap[KeyFinder::D_MINOR]      = {"D Minor",        "7A", 0xf7aeccff};
+    KeySignatureMap[KeyFinder::A_MINOR]      = {"A Minor",        "8A", 0xe2aeecff};
+    KeySignatureMap[KeyFinder::E_MINOR]      = {"E Minor",        "9A", 0xd1aefeff};
+    KeySignatureMap[KeyFinder::B_MINOR]      = {"B Minor",       "10A", 0xc5c1feff};
+    KeySignatureMap[KeyFinder::G_FLAT_MINOR] = {"F Sharp Minor", "11A", 0xb6e5ffff};
+    KeySignatureMap[KeyFinder::D_FLAT_MINOR] = {"D Flat Minor",  "12A", 0xaefefdff};
+
+    KeySignatureMap[KeyFinder::B_MAJOR]      = {"B Major",       "1B", 0x8effd1ff};
+    KeySignatureMap[KeyFinder::G_FLAT_MAJOR] = {"F Sharp Major", "2B", 0x9fff9eff};
+    KeySignatureMap[KeyFinder::D_FLAT_MAJOR] = {"D Flat Major",  "3B", 0xbaf976ff};
+    KeySignatureMap[KeyFinder::A_FLAT_MAJOR] = {"A Flat Major",  "4B", 0xd5ce74ff};
+    KeySignatureMap[KeyFinder::E_FLAT_MAJOR] = {"E Flat Major",  "5B", 0xf3a47bff};
+    KeySignatureMap[KeyFinder::B_FLAT_MAJOR] = {"B Flat Major",  "6B", 0xff7988ff};
+    KeySignatureMap[KeyFinder::F_MAJOR]      = {"F Major",       "7B", 0xf079b1ff};
+    KeySignatureMap[KeyFinder::C_MAJOR]      = {"C Major",       "8B", 0xcf7fe2ff};
+    KeySignatureMap[KeyFinder::G_MAJOR]      = {"G Major",       "9B", 0xb67fffff};
+    KeySignatureMap[KeyFinder::D_MAJOR]      = {"D Major",      "10B", 0x9fa4ffff};
+    KeySignatureMap[KeyFinder::A_MAJOR]      = {"A Major",      "11B", 0x82dfffff};
+    KeySignatureMap[KeyFinder::E_MAJOR]      = {"E Major",      "12B", 0x7efffbff};
+
+    KeySignatureMap[KeyFinder::SILENCE]      = {"(silence)",      "",  0xffffffff};
+}
+
+static KeyFinder::KeyFinder k;
+static KeyFinder::AudioData a;
+static KeyFinder::Workspace w;
+static KeyFinder::key_t latest_key;
+
+const static int SAMPLE_RATE = 44100;
+
+void initWorkspace() {
+    a = {};
+    w = {};
+    a.setFrameRate(SAMPLE_RATE);
+    a.setChannels(2);
+}
+
+void do_keyfind(float* bounded, size_t sampleCount) {
+    if(a.getSampleCount() > SAMPLE_RATE*10) initWorkspace();
+
+    a.addToSampleCount(sampleCount);
+    for(int i = 0; i < sampleCount; i++) {
+        try {
+            a.setSample(i, bounded[i]);
+        } catch(const KeyFinder::Exception& e) {
+            std::cerr << "Exception:" << e.what() << "\n";
+            return;
+        }
+    }
+    k.progressiveChromagram(a, w);
+
+    if(a.getSampleCount() > SAMPLE_RATE*2) {
+        KeyFinder::key_t key = k.keyOfChromagram(w);
+        if(latest_key != key) {
+            latest_key = key;
+            KeySignature sig = KeySignatureMap[latest_key];
+            std::cout << a.getSampleCount() << " " << sig.text << std::endl;
+        }
+    }
+    free(bounded);
+}
+
 class CustomRecorder : public sf::SoundRecorder {
     public:
         bool onProcessSamples(const sf::Int16* samples, size_t sampleCount);
 };
 
 bool CustomRecorder::onProcessSamples(const sf::Int16* samples, size_t sampleCount) {
-    /* std::memset(s_bars, 0, sizeof(s_bars)); */
-
     float *bounded = (float*)malloc(sampleCount*sizeof(float));
     for(int i = 0; i < sampleCount; i++) {
         float samp = ((float)samples[i] / 32768.0);
@@ -92,7 +165,9 @@ bool CustomRecorder::onProcessSamples(const sf::Int16* samples, size_t sampleCou
 done:
     free(mono);
     free(freq);
-    free(bounded);
+
+    std::thread t(do_keyfind, std::ref(bounded), sampleCount);
+    t.detach();
     return true;
 }
 
@@ -139,8 +214,22 @@ start:
     /* 
      * }}} */
  
+    initKeySignatureMap();
+    initWorkspace();
     rec.start();
     sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "fixing fft");
+
+    sf::Font font;
+    font.loadFromFile("sfns.ttf");
+
+    sf::Texture bgTexture;
+    bgTexture.loadFromFile("./camelotHarmonicMixing.jpg");
+    auto dim = bgTexture.getSize();
+    sf::Sprite bgSprite;
+    bgSprite.setTexture(bgTexture);
+    bgSprite.setScale(WINDOW_WIDTH / dim.x, WINDOW_HEIGHT / dim.y);
+
+    KeyFinder::key_t lastKey;
 
     while(window.isOpen()) {
         sf::Event e;
@@ -148,16 +237,49 @@ start:
             if(e.type == sf::Event::Closed || (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Q)) {
                 window.close();
             }
+            if(e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::R) {
+                initWorkspace();
+            }
         }
         window.setActive();
-        window.clear(sf::Color::White);            
+
+        KeySignature sig = KeySignatureMap[latest_key];
+        
+        if(lastKey != latest_key) {
+            window.setTitle(sf::String(sig.text) + " - " + sf::String(sig.code));
+            lastKey = latest_key;
+        }
+
+        sf::Text text(sig.text, font);
+        text.setCharacterSize(30);
+        text.setFillColor(sf::Color::Black);
+        sf::FloatRect rect = text.getLocalBounds();
+        text.setOrigin(rect.left + rect.width/2.f, 0);
+        text.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT - rect.height * 2);
+
+        sf::Text code(sig.code, font);
+        code.setCharacterSize(48);
+        code.setFillColor(sf::Color::Black);
+        rect = code.getLocalBounds();
+        code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
+        code.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
+
+        window.clear(sf::Color::White);
+
+        window.draw(bgSprite);
+
+        auto color = sf::Color(sig.color & 0xffffff00 | 0xe5);
         for(int i = 0; i < NUM_BANDS; i++) {
             sf::RectangleShape bar;
             bar.setSize(sf::Vector2f(WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT*s_bars[i]));
-            bar.setFillColor(sf::Color::Black);
+            bar.setFillColor(color);
             bar.setPosition(i*WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT - WINDOW_HEIGHT*s_bars[i]);
             window.draw(bar);
         }
+
+        window.draw(text);
+        window.draw(code);
+
         window.display();
     }
     rec.stop();
