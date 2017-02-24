@@ -103,34 +103,33 @@ static KeyFinder::key_t latest_key;
 
 const static int SAMPLE_RATE = 44100;
 
+const int packetSize = 8192;
+
 void initWorkspace() {
     a = {};
     w = {};
     a.setFrameRate(SAMPLE_RATE);
     a.setChannels(2);
+    a.addToSampleCount(packetSize);
 }
 
 void do_keyfind(float* bounded, size_t sampleCount) {
-    if(a.getSampleCount() > SAMPLE_RATE*10) initWorkspace();
-
-    a.addToSampleCount(sampleCount);
-    for(int i = 0; i < sampleCount; i++) {
-        try {
-            a.setSample(i, bounded[i]);
-        } catch(const KeyFinder::Exception& e) {
-            std::cerr << "Exception:" << e.what() << "\n";
-            return;
+    try {
+    for(int i = 0; i < sampleCount; i+=packetSize) {
+        for(int j = 0; j < packetSize && i+j < sampleCount; j++) {
+            a.setSample(j, bounded[i+j]);
         }
-    }
-    k.progressiveChromagram(a, w);
-
-    if(a.getSampleCount() > SAMPLE_RATE*2) {
+        k.progressiveChromagram(a, w);
         KeyFinder::key_t key = k.keyOfChromagram(w);
         if(latest_key != key) {
             latest_key = key;
             KeySignature sig = KeySignatureMap[latest_key];
             std::cout << a.getSampleCount() << " " << sig.text << std::endl;
         }
+    }
+    } catch(const KeyFinder::Exception& e) {
+        std::cerr << "Exception:" << e.what() << "\n";
+        return;
     }
     free(bounded);
 }

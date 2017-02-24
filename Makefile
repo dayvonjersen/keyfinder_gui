@@ -1,5 +1,6 @@
 all:
 	g++ -std=c++11 \
+		-g \
 		-O3 \
 		-I/usr/local/lib \
 		-L/usr/local/lib \
