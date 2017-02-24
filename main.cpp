@@ -217,6 +217,7 @@ start:
     initWorkspace();
     rec.start();
     sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "fixing fft");
+    window.setFramerateLimit(60);
 
     sf::Font font;
     font.loadFromFile("sfns.ttf");
