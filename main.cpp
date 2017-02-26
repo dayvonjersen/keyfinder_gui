@@ -19,6 +19,10 @@
 #define DB_RANGE 40
 static float logscale[NUM_BANDS + 1];
 static float s_bars[NUM_BANDS];
+#define OSC_SAMPLE_COUNT 512
+static float s_osc[OSC_SAMPLE_COUNT];
+
+static int visMode = 0; // odd bars, even osc
 
 static void make_log_graph (const float* freq, float* graph) {
     for (int i = 0; i < NUM_BANDS; i++) {
@@ -93,7 +97,7 @@ void initKeySignatureMap() {
     KeySignatureMap[KeyFinder::A_MAJOR]      = {"A Major",      "11B", 0x82dfffff};
     KeySignatureMap[KeyFinder::E_MAJOR]      = {"E Major",      "12B", 0x7efffbff};
 
-    KeySignatureMap[KeyFinder::SILENCE]      = {"(silence)",      "",  0xffffffff};
+    KeySignatureMap[KeyFinder::SILENCE]      = {"(silence)",      "",  0x999999ff};
 }
 
 static KeyFinder::KeyFinder k;
@@ -134,6 +138,57 @@ void do_keyfind(float* bounded, size_t sampleCount) {
     free(bounded);
 }
 
+void calc_osc(float *mono) {
+    for(int i = 0; i < OSC_SAMPLE_COUNT; i++) {
+        s_osc[i] = (mono[i] + 1.f / 2.f);
+    }
+}
+
+void calc_bars(float *mono, float *freq) {
+    calc_freq(mono, freq);
+    make_log_graph(freq, s_bars);
+}
+
+void draw_osc(sf::RenderWindow& window, sf::Color color) {
+    sf::VertexArray lines;
+    sf::VertexArray lines2;
+    sf::VertexArray lines3;
+    lines = sf::VertexArray(sf::LineStrip, OSC_SAMPLE_COUNT);
+    lines2 = sf::VertexArray(sf::LineStrip, OSC_SAMPLE_COUNT);
+    lines3 = sf::VertexArray(sf::LineStrip, OSC_SAMPLE_COUNT);
+    float sliceWidth = WINDOW_WIDTH / (float)OSC_SAMPLE_COUNT;
+    float x = 0;
+    for(int i = 0; i < OSC_SAMPLE_COUNT; i++) {
+        float y = s_osc[i] * WINDOW_HEIGHT;
+        lines[i].position = sf::Vector2f(x, y);
+        lines[i].color = color;
+        lines2[i].position = sf::Vector2f(x, y+1.f);
+        lines2[i].color = color;
+        lines3[i].position = sf::Vector2f(x, y-1.f);
+        lines3[i].color = color;
+        x += sliceWidth;
+    }
+    window.draw(lines);
+    window.draw(lines2);
+    window.draw(lines3);
+}
+
+void draw_bars(sf::RenderWindow& window, sf::Color color) {
+    sf::VertexArray line(sf::Lines, 2);
+    line[0].position = sf::Vector2f(0, 0);
+    line[0].color = color;
+    line[1].position = sf::Vector2f(WINDOW_WIDTH, WINDOW_HEIGHT);
+    line[1].color = color;
+    window.draw(line);
+    for(int i = 0; i < NUM_BANDS; i++) {
+        sf::RectangleShape bar;
+        bar.setSize(sf::Vector2f(WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT*s_bars[i]));
+        bar.setFillColor(color);
+        bar.setPosition(i*WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT - WINDOW_HEIGHT*s_bars[i]);
+        window.draw(bar);
+    }
+}
+
 class CustomRecorder : public sf::SoundRecorder {
     public:
         bool onProcessSamples(const sf::Int16* samples, size_t sampleCount);
@@ -147,18 +202,19 @@ bool CustomRecorder::onProcessSamples(const sf::Int16* samples, size_t sampleCou
         if(samp < -1) samp = -1;
         bounded[i] = samp;
     }
-
+    
     float *mono = (float*)malloc(512*sizeof(float));
     float *freq = (float*)malloc(256*sizeof(float));
-    for(int i = 0; i < sampleCount; i+=256) {
-
+    for(int i = 0; i < sampleCount; i+=512) {
         for(int j = 0; j < 512; j++) {
             if(i+j >= sampleCount) goto done;
             mono[j] = bounded[i+j];
         }
-
-        calc_freq(mono, freq);
-        make_log_graph(freq, s_bars);
+        if(visMode&1) {
+            calc_bars(mono, freq);
+        } else {
+            calc_osc(mono);
+        }    
 
     }    
 done:
@@ -237,8 +293,13 @@ start:
             if(e.type == sf::Event::Closed || (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Q)) {
                 window.close();
             }
-            if(e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::R) {
-                initWorkspace();
+            if(e.type == sf::Event::KeyPressed) {
+                if(e.key.code == sf::Keyboard::R) {
+                    initWorkspace();
+                }
+                else if(e.key.code == sf::Keyboard::O) {
+                    visMode++;
+                }
             }
         }
         window.setActive();
@@ -268,13 +329,11 @@ start:
 
         window.draw(bgSprite);
 
-        auto color = sf::Color(sig.color & 0xffffff00 | 0xe5);
-        for(int i = 0; i < NUM_BANDS; i++) {
-            sf::RectangleShape bar;
-            bar.setSize(sf::Vector2f(WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT*s_bars[i]));
-            bar.setFillColor(color);
-            bar.setPosition(i*WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT - WINDOW_HEIGHT*s_bars[i]);
-            window.draw(bar);
+        sf::Color color = sf::Color(sig.color & 0xffffff00 | 0xe5);
+        if(visMode&1) {
+            draw_bars(window, color);
+        } else {
+            draw_osc(window, color);
         }
 
         window.draw(text);
