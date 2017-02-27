@@ -174,17 +174,14 @@ void draw_osc(sf::RenderWindow& window, sf::Color color) {
 }
 
 void draw_bars(sf::RenderWindow& window, sf::Color color) {
-    sf::VertexArray line(sf::Lines, 2);
-    line[0].position = sf::Vector2f(0, 0);
-    line[0].color = color;
-    line[1].position = sf::Vector2f(WINDOW_WIDTH, WINDOW_HEIGHT);
-    line[1].color = color;
-    window.draw(line);
+    float padX = 1.f;
+    float w = (WINDOW_WIDTH - padX*NUM_BANDS) / NUM_BANDS;
     for(int i = 0; i < NUM_BANDS; i++) {
+        float x = i*w + i*padX;
         sf::RectangleShape bar;
-        bar.setSize(sf::Vector2f(WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT*s_bars[i]));
+        bar.setSize(sf::Vector2f(w, WINDOW_HEIGHT*s_bars[i]));
         bar.setFillColor(color);
-        bar.setPosition(i*WINDOW_WIDTH/NUM_BANDS, WINDOW_HEIGHT - WINDOW_HEIGHT*s_bars[i]);
+        bar.setPosition(x, WINDOW_HEIGHT - WINDOW_HEIGHT*s_bars[i]);
         window.draw(bar);
     }
 }
