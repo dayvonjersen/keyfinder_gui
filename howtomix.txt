@@ -1,0 +1,5 @@
+tl;dr: currentKey.number + [1, 0, -1].random() OR currentKey.AB = A ? B : A
+
+To select a compatible song, choose a keycode within one "hour" of your current keycode.  If you are in 8A, you can play 7A, 8A or 9A next.  If you are in 12A, you can play 11A, 12A or 1A.  This mix will be smooth every time.
+
+You can also mix between inner and outer wheels if you stay in the same "hour."  For example, try mixing from 8A to 8B, and notice the change in melody as you go from Minor to Major.
