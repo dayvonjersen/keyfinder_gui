@@ -276,7 +276,7 @@ start:
     font.loadFromFile("sfns.ttf");
 
     sf::Texture bgTexture;
-    bgTexture.loadFromFile("./camelotHarmonicMixing.jpg");
+    bgTexture.loadFromFile("./camelotHarmonicMixing--clean.png");
     auto dim = bgTexture.getSize();
     sf::Sprite bgSprite;
     bgSprite.setTexture(bgTexture);
@@ -309,17 +309,17 @@ start:
         }
 
         sf::Text text(sig.text, font);
-        text.setCharacterSize(30);
+        text.setCharacterSize(12);
         text.setFillColor(sf::Color::Black);
         sf::FloatRect rect = text.getLocalBounds();
         text.setOrigin(rect.left + rect.width/2.f, 0);
-        text.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT - rect.height * 2);
+        text.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f - rect.height*2.f);
 
         sf::Text code(sig.code, font);
-        code.setCharacterSize(48);
+        code.setCharacterSize(28);
         code.setFillColor(sf::Color::Black);
         rect = code.getLocalBounds();
-        code.setOrigin(rect.left + rect.width/2.f, rect.top + rect.height/2.f);
+        code.setOrigin(rect.left + rect.width/2.f, rect.top - rect.height/2.f);
         code.setPosition(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
 
         window.clear(sf::Color::White);
