@@ -107,7 +107,7 @@ static KeyFinder::key_t latest_key;
 
 const static int SAMPLE_RATE = 44100;
 
-const int packetSize = 8192;
+const int packetSize = 44100*5;
 
 void initWorkspace() {
     a = {};
