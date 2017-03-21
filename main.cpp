@@ -71,33 +71,33 @@ struct KeySignature {
 static std::map<KeyFinder::key_t, KeySignature> KeySignatureMap;
 
 void initKeySignatureMap() {
-    KeySignatureMap[KeyFinder::A_FLAT_MINOR] = {"A Flat Minor",   "1A", 0xb8ffe1ff};
-    KeySignatureMap[KeyFinder::E_FLAT_MINOR] = {"E Flat Minor",   "2A", 0xc2ffc6ff};
-    KeySignatureMap[KeyFinder::B_FLAT_MINOR] = {"B Flat Minor",   "3A", 0xd2f7a7ff};
-    KeySignatureMap[KeyFinder::F_MINOR]      = {"F Minor",        "4A", 0xe4e2a9ff};
-    KeySignatureMap[KeyFinder::C_MINOR]      = {"C Minor",        "5A", 0xf6c4abff};
-    KeySignatureMap[KeyFinder::G_MINOR]      = {"G Minor",        "6A", 0xffafb8ff};
-    KeySignatureMap[KeyFinder::D_MINOR]      = {"D Minor",        "7A", 0xf7aeccff};
-    KeySignatureMap[KeyFinder::A_MINOR]      = {"A Minor",        "8A", 0xe2aeecff};
-    KeySignatureMap[KeyFinder::E_MINOR]      = {"E Minor",        "9A", 0xd1aefeff};
-    KeySignatureMap[KeyFinder::B_MINOR]      = {"B Minor",       "10A", 0xc5c1feff};
-    KeySignatureMap[KeyFinder::G_FLAT_MINOR] = {"F Sharp Minor", "11A", 0xb6e5ffff};
-    KeySignatureMap[KeyFinder::D_FLAT_MINOR] = {"D Flat Minor",  "12A", 0xaefefdff};
+    KeySignatureMap[KeyFinder::A_FLAT_MINOR] = {"A Flat Minor",   "1A", 0xc2ffdcff};
+    KeySignatureMap[KeyFinder::E_FLAT_MINOR] = {"E Flat Minor",   "2A", 0xcbffc6ff};
+    KeySignatureMap[KeyFinder::B_FLAT_MINOR] = {"B Flat Minor",   "3A", 0xd3f6a4ff};
+    KeySignatureMap[KeyFinder::F_MINOR]      = {"F Minor",        "4A", 0xdbdfa5ff};
+    KeySignatureMap[KeyFinder::C_MINOR]      = {"C Minor",        "5A", 0xeec8a5ff};
+    KeySignatureMap[KeyFinder::G_MINOR]      = {"G Minor",        "6A", 0xf8afbcff};
+    KeySignatureMap[KeyFinder::D_MINOR]      = {"D Minor",        "7A", 0xeeaec8ff};
+    KeySignatureMap[KeyFinder::A_MINOR]      = {"A Minor",        "8A", 0xdbade9ff};
+    KeySignatureMap[KeyFinder::E_MINOR]      = {"E Minor",        "9A", 0xd2acffff};
+    KeySignatureMap[KeyFinder::B_MINOR]      = {"B Minor",       "10A", 0xbfc5ffff};
+    KeySignatureMap[KeyFinder::G_FLAT_MINOR] = {"F Sharp Minor", "11A", 0xc1dcffff};
+    KeySignatureMap[KeyFinder::D_FLAT_MINOR] = {"D Flat Minor",  "12A", 0xbafffeff};
 
-    KeySignatureMap[KeyFinder::B_MAJOR]      = {"B Major",       "1B", 0x8effd1ff};
-    KeySignatureMap[KeyFinder::G_FLAT_MAJOR] = {"F Sharp Major", "2B", 0x9fff9eff};
-    KeySignatureMap[KeyFinder::D_FLAT_MAJOR] = {"D Flat Major",  "3B", 0xbaf976ff};
-    KeySignatureMap[KeyFinder::A_FLAT_MAJOR] = {"A Flat Major",  "4B", 0xd5ce74ff};
-    KeySignatureMap[KeyFinder::E_FLAT_MAJOR] = {"E Flat Major",  "5B", 0xf3a47bff};
-    KeySignatureMap[KeyFinder::B_FLAT_MAJOR] = {"B Flat Major",  "6B", 0xff7988ff};
-    KeySignatureMap[KeyFinder::F_MAJOR]      = {"F Major",       "7B", 0xf079b1ff};
-    KeySignatureMap[KeyFinder::C_MAJOR]      = {"C Major",       "8B", 0xcf7fe2ff};
-    KeySignatureMap[KeyFinder::G_MAJOR]      = {"G Major",       "9B", 0xb67fffff};
-    KeySignatureMap[KeyFinder::D_MAJOR]      = {"D Major",      "10B", 0x9fa4ffff};
-    KeySignatureMap[KeyFinder::A_MAJOR]      = {"A Major",      "11B", 0x82dfffff};
-    KeySignatureMap[KeyFinder::E_MAJOR]      = {"E Major",      "12B", 0x7efffbff};
+    KeySignatureMap[KeyFinder::B_MAJOR]      = {"B Major",       "1B", 0x9cffc5ff};
+    KeySignatureMap[KeyFinder::G_FLAT_MAJOR] = {"F Sharp Major", "2B", 0xa3ff98ff};
+    KeySignatureMap[KeyFinder::D_FLAT_MAJOR] = {"D Flat Major",  "3B", 0xb4f777ff};
+    KeySignatureMap[KeyFinder::A_FLAT_MAJOR] = {"A Flat Major",  "4B", 0xc5d46eff};
+    KeySignatureMap[KeyFinder::E_FLAT_MAJOR] = {"E Flat Major",  "5B", 0xeca57bff};
+    KeySignatureMap[KeyFinder::B_FLAT_MAJOR] = {"B Flat Major",  "6B", 0xf58391ff};
+    KeySignatureMap[KeyFinder::F_MAJOR]      = {"F Major",       "7B", 0xe176bcff};
+    KeySignatureMap[KeyFinder::C_MAJOR]      = {"C Major",       "8B", 0xce74deff};
+    KeySignatureMap[KeyFinder::G_MAJOR]      = {"G Major",       "9B", 0xb17dffff};
+    KeySignatureMap[KeyFinder::D_MAJOR]      = {"D Major",      "10B", 0x9f95ffff};
+    KeySignatureMap[KeyFinder::A_MAJOR]      = {"A Major",      "11B", 0x9ac5ffff};
+    KeySignatureMap[KeyFinder::E_MAJOR]      = {"E Major",      "12B", 0x97fff2ff};
 
-    KeySignatureMap[KeyFinder::SILENCE]      = {"(silence)",      "",  0x999999ff};
+    KeySignatureMap[KeyFinder::SILENCE]      = {"(silence)",      "",  0x454545ff};
 }
 
 static KeyFinder::KeyFinder k;
